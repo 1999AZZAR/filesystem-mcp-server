@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "filesystem-mcp": {
+      "command": "node",
+      "args": ["/path/to/filesystem-mcp-server/dist/index.js"],
+      "env": {}
+    }
+  }
+}

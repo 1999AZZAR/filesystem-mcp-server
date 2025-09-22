@@ -1,0 +1,60 @@
+{
+  "name": "filesystem-mcp-server",
+  "version": "1.0.0",
+  "description": "A comprehensive Model Context Protocol (MCP) server for file system operations with advanced features like file watching, search, and batch operations.",
+  "author": "Azzar Budiyanto",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix"
+  },
+  "keywords": [
+    "mcp",
+    "filesystem",
+    "file-operations",
+    "model-context-protocol",
+    "file-management",
+    "directory-operations"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.0",
+    "archiver": "^6.0.1",
+    "chokidar": "^3.5.3",
+    "glob": "^10.3.10",
+    "mime-types": "^2.1.35",
+    "unzipper": "^0.10.14",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.2",
+    "@types/jest": "^29.5.8",
+    "@types/mime-types": "^2.1.4",
+    "@types/node": "^20.10.0",
+    "@types/unzipper": "^0.10.11",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.54.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/1999AZZAR/filesystem-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/1999AZZAR/filesystem-mcp-server/issues"
+  },
+  "homepage": "https://github.com/1999AZZAR/filesystem-mcp-server#readme"
+}
