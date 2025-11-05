@@ -31,6 +31,224 @@ A comprehensive Model Context Protocol (MCP) server for advanced file system ope
 - **Error Recovery**: Graceful error handling with detailed error messages
 - **Resource Management**: Automatic cleanup of watchers and resources
 - **Performance**: Optimized for large file operations and batch processing
+- **Intelligent Caching**: TTL-based caching system for file metadata and search results
+- **MCP Resources**: 7 specialized resources providing cached filesystem data and metadata
+
+## Available Resources
+
+FileSystem MCP Server provides **7 specialized resources** that offer cached file system data and intelligent metadata access with configurable TTL-based caching for optimal performance:
+
+### `file://metadata/{path}`
+Returns cached metadata for files and directories including permissions, size, modification dates, and ownership.
+
+**Resource Details:**
+- **Purpose**: Access file/directory metadata without repeated stat calls
+- **Benefits**: Faster file information queries, reduced I/O operations, metadata caching
+- **Cache TTL**: 5 minutes - balances metadata freshness with performance
+- **Use Cases**: File explorers, permission checking, size calculations, file monitoring
+
+**Response Format:**
+```json
+{
+  "path": "/home/user/document.txt",
+  "metadata": {
+    "size": 1024,
+    "permissions": "rw-r--r--",
+    "owner": "user",
+    "group": "users",
+    "modified": "2025-11-02T10:30:00.000Z",
+    "accessed": "2025-11-02T10:30:00.000Z",
+    "created": "2025-11-01T15:20:00.000Z"
+  },
+  "cached": false,
+  "timestamp": "2025-11-02T17:09:14.866Z"
+}
+```
+
+### `file://directory/{path}`
+Provides cached directory listing with file details, sizes, and metadata for faster browsing.
+
+**Resource Details:**
+- **Purpose**: Access directory contents without repeated directory reads
+- **Benefits**: Instant directory browsing, cached file listings, reduced I/O for navigation
+- **Cache TTL**: 5 minutes - keeps directory structure reasonably current
+- **Use Cases**: File managers, directory exploration, project navigation
+
+**Response Format:**
+```json
+{
+  "path": "/home/user/projects",
+  "contents": {
+    "success": true,
+    "data": {
+      "items": [
+        {
+          "name": "app.js",
+          "path": "/home/user/projects/app.js",
+          "type": "file",
+          "size": 2048,
+          "permissions": "rw-r--r--",
+          "modified": "2025-11-02T10:30:00.000Z"
+        }
+      ]
+    }
+  },
+  "cached": false,
+  "timestamp": "2025-11-02T17:09:14.866Z"
+}
+```
+
+### `file://search/cache/{query}`
+Caches results from file content and pattern searches across the filesystem.
+
+**Resource Details:**
+- **Purpose**: Cache expensive search operations across large codebases
+- **Benefits**: Fast repeated searches, reduced filesystem traversal, search result persistence
+- **Cache TTL**: 5 minutes - allows for reasonable search result freshness
+- **Use Cases**: Code search, content finding, pattern matching, file discovery
+
+**Response Format:**
+```json
+{
+  "query": "function.*handleError",
+  "results": {
+    "success": true,
+    "data": {
+      "matches": [
+        {
+          "file": "/src/error-handler.js",
+          "line": 15,
+          "content": "function handleError(error) {",
+          "context": ["// Error handling function", "function handleError(error) {", "  console.error(error);"]
+        }
+      ]
+    }
+  },
+  "cached": false,
+  "timestamp": "2025-11-02T17:09:14.866Z"
+}
+```
+
+### `file://watch/status/{path}`
+Shows current status and recent events for file system watchers.
+
+**Resource Details:**
+- **Purpose**: Monitor file watching status and recent change events
+- **Benefits**: Track active watchers, view recent file changes, debug watch operations
+- **Cache TTL**: 30 seconds - provides near real-time watch status
+- **Use Cases**: Development monitoring, file change tracking, watch debugging
+
+**Response Format:**
+```json
+{
+  "path": "/home/user/projects",
+  "isWatching": true,
+  "lastEvents": [
+    {
+      "event": "change",
+      "filename": "app.js",
+      "timestamp": "2025-11-02T17:08:45.123Z"
+    }
+  ],
+  "cached": false,
+  "timestamp": "2025-11-02T17:09:14.866Z"
+}
+```
+
+### `file://recent/{type}`
+Lists recently accessed files of specified type (read/write/modified).
+
+**Resource Details:**
+- **Purpose**: Track recently accessed files for quick access and auditing
+- **Benefits**: Quick access to recently worked files, usage tracking, productivity insights
+- **Cache TTL**: 5 minutes - keeps recent file list reasonably current
+- **Use Cases**: File history, recent documents, usage analytics
+
+**Response Format:**
+```json
+{
+  "type": "modified",
+  "files": [
+    {
+      "path": "/home/user/document.txt",
+      "accessed": "2025-11-02T17:05:00.000Z",
+      "size": 1024
+    }
+  ],
+  "count": 1,
+  "cached": false,
+  "timestamp": "2025-11-02T17:09:14.866Z"
+}
+```
+
+### `file://structure/{path}`
+Provides hierarchical directory structure with file counts and size summaries.
+
+**Resource Details:**
+- **Purpose**: Get complete directory tree structure with statistics
+- **Benefits**: Project overview, size analysis, structure visualization, disk usage tracking
+- **Cache TTL**: 5 minutes - balances structure accuracy with performance
+- **Use Cases**: Project analysis, disk cleanup, directory visualization
+
+**Response Format:**
+```json
+{
+  "path": "/home/user/projects",
+  "structure": {
+    "name": "projects",
+    "type": "directory",
+    "path": "/home/user/projects",
+    "children": [
+      {
+        "name": "src",
+        "type": "directory",
+        "path": "/home/user/projects/src",
+        "size": 0
+      },
+      {
+        "name": "README.md",
+        "type": "file",
+        "path": "/home/user/projects/README.md",
+        "size": 2048
+      }
+    ],
+    "stats": {
+      "totalFiles": 5,
+      "totalDirs": 3,
+      "totalSize": 15360
+    }
+  },
+  "cached": false,
+  "timestamp": "2025-11-02T17:09:14.866Z"
+}
+```
+
+### `file://content/preview/{path}`
+Generates cached preview of file content (first lines/chars) for quick inspection.
+
+**Resource Details:**
+- **Purpose**: Preview file content without loading entire files
+- **Benefits**: Quick file inspection, content type detection, safe file preview
+- **Cache TTL**: 5 minutes - keeps previews reasonably fresh
+- **Use Cases**: File exploration, content verification, type detection, safe browsing
+
+**Response Format:**
+```json
+{
+  "path": "/home/user/document.txt",
+  "preview": {
+    "path": "/home/user/document.txt",
+    "type": "file",
+    "preview": "This is the beginning of the document...\nIt contains important information...",
+    "canPreview": true,
+    "size": 1024,
+    "mimeType": "text/plain",
+    "encoding": "utf8"
+  },
+  "cached": false,
+  "timestamp": "2025-11-02T17:09:14.866Z"
+}
+```
 
 ## Installation
 

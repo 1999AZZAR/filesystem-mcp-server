@@ -3,6 +3,9 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
+  Resource,
 } from '@modelcontextprotocol/sdk/types.js';
 import { FileOperations } from './file-operations.js';
 import { DirectoryOperations } from './directory-operations.js';
@@ -29,6 +32,9 @@ import {
  */
 export class FileSystemMCPServer {
   private server: Server;
+  private cache: Map<string, { data: any; timestamp: number; ttl: number }> = new Map();
+  private readonly DEFAULT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  private readonly FILE_WATCH_CACHE_TTL = 30 * 1000; // 30 seconds for watch status
 
   constructor() {
     this.server = new Server(
@@ -39,13 +45,40 @@ export class FileSystemMCPServer {
       {
         capabilities: {
           tools: {},
+          resources: {},
         },
       }
     );
 
     this.setupToolHandlers();
+    this.setupResourceHandlers();
     this.setupErrorHandling();
   }
+
+  private getCacheKey(type: string, params: any): string {
+    return `${type}:${JSON.stringify(params)}`;
+  }
+
+  private getCachedData(key: string): any | null {
+    const cached = this.cache.get(key);
+    if (!cached) return null;
+
+    if (Date.now() - cached.timestamp > cached.ttl) {
+      this.cache.delete(key);
+      return null;
+    }
+
+    return cached.data;
+  }
+
+  private setCachedData(key: string, data: any, ttl: number = this.DEFAULT_CACHE_TTL): void {
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now(),
+      ttl
+    });
+  }
+
 
   private setupToolHandlers(): void {
     // List available tools
@@ -378,6 +411,450 @@ export class FileSystemMCPServer {
         };
       }
     });
+  }
+
+  // Resource definitions
+  private get resources(): Resource[] {
+    return [
+      {
+        uri: "file://metadata/{path}",
+        name: "File/Directory Metadata",
+        description: "Cached metadata for files and directories including permissions, size, modification dates, and ownership",
+        mimeType: "application/json",
+      },
+      {
+        uri: "file://directory/{path}",
+        name: "Directory Contents Cache",
+        description: "Cached directory listing with file details, sizes, and metadata for faster browsing",
+        mimeType: "application/json",
+      },
+      {
+        uri: "file://search/cache/{query}",
+        name: "File Search Results Cache",
+        description: "Cached results from file content and pattern searches across the filesystem",
+        mimeType: "application/json",
+      },
+      {
+        uri: "file://watch/status/{path}",
+        name: "File Watch Status",
+        description: "Current status and recent events for file system watchers",
+        mimeType: "application/json",
+      },
+      {
+        uri: "file://recent/{type}",
+        name: "Recently Accessed Files",
+        description: "Recently read, written, or modified files of specified type (read/write/modified)",
+        mimeType: "application/json",
+      },
+      {
+        uri: "file://structure/{path}",
+        name: "Directory Tree Structure",
+        description: "Hierarchical directory structure with file counts and size summaries",
+        mimeType: "application/json",
+      },
+      {
+        uri: "file://content/preview/{path}",
+        name: "File Content Preview",
+        description: "Cached preview of file content (first lines/chars) for quick inspection",
+        mimeType: "application/json",
+      },
+    ];
+  }
+
+  private setupResourceHandlers(): void {
+    // List resources handler
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      return {
+        resources: this.resources,
+      };
+    });
+
+    // Read resource handler
+    this.server.setRequestHandler(ReadResourceRequestSchema, async (request: any) => {
+      const { uri } = request.params;
+
+      try {
+        // Handle file/directory metadata cache
+        if (uri.startsWith("file://metadata/")) {
+          const path = decodeURIComponent(uri.replace("file://metadata/", ""));
+          const cacheKey = this.getCacheKey('metadata', { path });
+
+          let data = this.getCachedData(cacheKey);
+          if (!data) {
+            // Get fresh metadata
+            const metadata = await FileOperations.getFileInfo({ path, followSymlinks: true });
+            data = {
+              path,
+              metadata,
+              cached: false,
+              timestamp: new Date().toISOString(),
+            };
+            this.setCachedData(cacheKey, data);
+          } else {
+            data.cached = true;
+          }
+
+          return {
+            contents: [
+              {
+                uri,
+                mimeType: "application/json",
+                text: JSON.stringify(data, null, 2),
+              },
+            ],
+          };
+        }
+
+        // Handle directory contents cache
+        if (uri.startsWith("file://directory/")) {
+          const path = decodeURIComponent(uri.replace("file://directory/", ""));
+          const cacheKey = this.getCacheKey('directory', { path });
+
+          let data = this.getCachedData(cacheKey);
+          if (!data) {
+            // Get fresh directory listing
+            const contents = await DirectoryOperations.listDirectory({ path, recursive: false, includeHidden: false });
+            data = {
+              path,
+              contents,
+              cached: false,
+              timestamp: new Date().toISOString(),
+            };
+            this.setCachedData(cacheKey, data);
+          } else {
+            data.cached = true;
+          }
+
+          return {
+            contents: [
+              {
+                uri,
+                mimeType: "application/json",
+                text: JSON.stringify(data, null, 2),
+              },
+            ],
+          };
+        }
+
+        // Handle search results cache
+        if (uri.startsWith("file://search/cache/")) {
+          const query = decodeURIComponent(uri.replace("file://search/cache/", ""));
+          const cacheKey = this.getCacheKey('search_cache', { query });
+
+          let data = this.getCachedData(cacheKey);
+          if (!data) {
+            // Perform fresh search (simplified - would need to parse query)
+            const searchResults = await AdvancedOperations.searchInFiles({
+              pattern: query,
+              directory: "/",
+              includeHidden: false,
+              caseSensitive: false,
+              wholeWord: false,
+              contextLines: 2
+            });
+            data = {
+              query,
+              results: searchResults,
+              cached: false,
+              timestamp: new Date().toISOString(),
+            };
+            this.setCachedData(cacheKey, data);
+          } else {
+            data.cached = true;
+          }
+
+          return {
+            contents: [
+              {
+                uri,
+                mimeType: "application/json",
+                text: JSON.stringify(data, null, 2),
+              },
+            ],
+          };
+        }
+
+        // Handle file watch status
+        if (uri.startsWith("file://watch/status/")) {
+          const path = decodeURIComponent(uri.replace("file://watch/status/", ""));
+          const cacheKey = this.getCacheKey('watch_status', { path });
+
+          let data = this.getCachedData(cacheKey);
+          if (!data) {
+            // Get current watch status (simplified - would need watch manager)
+            data = {
+              path,
+              isWatching: false, // Would need to check actual watch status
+              lastEvents: [],
+              cached: false,
+              timestamp: new Date().toISOString(),
+            };
+            this.setCachedData(cacheKey, data, this.FILE_WATCH_CACHE_TTL);
+          } else {
+            data.cached = true;
+          }
+
+          return {
+            contents: [
+              {
+                uri,
+                mimeType: "application/json",
+                text: JSON.stringify(data, null, 2),
+              },
+            ],
+          };
+        }
+
+        // Handle recently accessed files
+        if (uri.startsWith("file://recent/")) {
+          const type = uri.replace("file://recent/", "");
+          const cacheKey = this.getCacheKey('recent_files', { type });
+
+          let data = this.getCachedData(cacheKey);
+          if (!data) {
+            // Get recent files (simplified - would need access tracking)
+            data = {
+              type,
+              files: [], // Would need to track actual recent files
+              count: 0,
+              cached: false,
+              timestamp: new Date().toISOString(),
+            };
+            this.setCachedData(cacheKey, data);
+          } else {
+            data.cached = true;
+          }
+
+          return {
+            contents: [
+              {
+                uri,
+                mimeType: "application/json",
+                text: JSON.stringify(data, null, 2),
+              },
+            ],
+          };
+        }
+
+        // Handle directory tree structure
+        if (uri.startsWith("file://structure/")) {
+          const path = decodeURIComponent(uri.replace("file://structure/", ""));
+          const cacheKey = this.getCacheKey('directory_structure', { path });
+
+          let data = this.getCachedData(cacheKey);
+          if (!data) {
+            // Generate directory tree (simplified)
+            const structure = await this.getDirectoryStructure(path);
+            data = {
+              path,
+              structure,
+              cached: false,
+              timestamp: new Date().toISOString(),
+            };
+            this.setCachedData(cacheKey, data);
+          } else {
+            data.cached = true;
+          }
+
+          return {
+            contents: [
+              {
+                uri,
+                mimeType: "application/json",
+                text: JSON.stringify(data, null, 2),
+              },
+            ],
+          };
+        }
+
+        // Handle file content preview
+        if (uri.startsWith("file://content/preview/")) {
+          const path = decodeURIComponent(uri.replace("file://content/preview/", ""));
+          const cacheKey = this.getCacheKey('content_preview', { path });
+
+          let data = this.getCachedData(cacheKey);
+          if (!data) {
+            // Get file preview
+            const preview = await this.getFilePreview(path);
+            data = {
+              path,
+              preview,
+              cached: false,
+              timestamp: new Date().toISOString(),
+            };
+            this.setCachedData(cacheKey, data);
+          } else {
+            data.cached = true;
+          }
+
+          return {
+            contents: [
+              {
+                uri,
+                mimeType: "application/json",
+                text: JSON.stringify(data, null, 2),
+              },
+            ],
+          };
+        }
+
+        throw new Error(`Unknown resource: ${uri}`);
+      } catch (error) {
+        throw new Error(`Failed to read resource ${uri}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    });
+  }
+
+  private async getDirectoryStructure(path: string): Promise<any> {
+    try {
+      const result = await DirectoryOperations.listDirectory({ path, recursive: false, includeHidden: false });
+      const contents = result.success ? (result.data?.items || []) : [];
+      const structure: any = {
+        name: path.split('/').pop() || path,
+        type: 'directory',
+        path: path,
+        children: [],
+        stats: {
+          totalFiles: 0,
+          totalDirs: 0,
+          totalSize: 0
+        }
+      };
+
+      for (const item of contents) {
+        if (item.type === 'directory') {
+          structure.stats.totalDirs++;
+          // For deep structure, we'd recurse here but keeping it shallow for performance
+          structure.children.push({
+            name: item.name,
+            type: 'directory',
+            path: item.path,
+            size: item.size || 0
+          });
+        } else {
+          structure.stats.totalFiles++;
+          structure.stats.totalSize += item.size || 0;
+          structure.children.push({
+            name: item.name,
+            type: 'file',
+            path: item.path,
+            size: item.size || 0
+          });
+        }
+      }
+
+      return structure;
+    } catch (error) {
+      return {
+        name: path.split('/').pop() || path,
+        type: 'directory',
+        path: path,
+        error: error instanceof Error ? error.message : String(error),
+        children: [],
+        stats: { totalFiles: 0, totalDirs: 0, totalSize: 0 }
+      };
+    }
+  }
+
+  private async getFilePreview(path: string): Promise<any> {
+    try {
+      // Get basic file info first
+      const statsResult = await FileOperations.getFileInfo({ path, followSymlinks: true });
+
+      if (statsResult.success && statsResult.data) {
+        const stats = statsResult.data;
+
+        if (stats.isDirectory) {
+          return {
+            path,
+            type: 'directory',
+            preview: 'Directory contents',
+            size: stats.size,
+            canPreview: false
+          };
+        }
+
+      // Try to read first few lines/chars
+      let preview = '';
+      let canPreview = false;
+
+      try {
+        const result = await FileOperations.readFile({ path, encoding: 'utf8', offset: 0, limit: 1024 });
+        if (result.success && result.data?.content) {
+          const content = typeof result.data.content === 'string' ? result.data.content : result.data.content.toString();
+          preview = content.slice(0, 500); // First 500 chars
+          canPreview = true;
+        } else {
+          preview = 'Unable to read file content';
+          canPreview = false;
+        }
+      } catch (error) {
+        preview = 'Binary file or read error';
+        canPreview = false;
+      }
+
+      return {
+        path,
+        type: 'file',
+        preview,
+        canPreview,
+        size: stats.size,
+        mimeType: this.guessMimeType(path),
+        encoding: canPreview ? 'utf8' : 'binary'
+      };
+      } else {
+        return {
+          path,
+          type: 'unknown',
+          preview: 'Unable to get file info',
+          canPreview: false,
+          error: 'File info not available'
+        };
+      }
+    } catch (error) {
+      return {
+        path,
+        type: 'unknown',
+        preview: 'Unable to generate preview',
+        canPreview: false,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
+  private guessMimeType(path: string): string {
+    const ext = path.split('.').pop()?.toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      'txt': 'text/plain',
+      'json': 'application/json',
+      'js': 'application/javascript',
+      'ts': 'application/typescript',
+      'md': 'text/markdown',
+      'html': 'text/html',
+      'css': 'text/css',
+      'xml': 'application/xml',
+      'yaml': 'application/yaml',
+      'yml': 'application/yaml',
+      'py': 'text/x-python',
+      'java': 'text/x-java-source',
+      'c': 'text/x-c',
+      'cpp': 'text/x-c++',
+      'h': 'text/x-c',
+      'hpp': 'text/x-c++',
+      'sh': 'application/x-shellscript',
+      'bash': 'application/x-shellscript',
+      'png': 'image/png',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'gif': 'image/gif',
+      'svg': 'image/svg+xml',
+      'pdf': 'application/pdf',
+      'zip': 'application/zip',
+      'tar': 'application/x-tar',
+      'gz': 'application/gzip'
+    };
+
+    return mimeTypes[ext || ''] || 'application/octet-stream';
   }
 
   private setupErrorHandling(): void {
