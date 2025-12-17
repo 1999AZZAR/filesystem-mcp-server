@@ -2,6 +2,37 @@
 
 A comprehensive Model Context Protocol (MCP) server for advanced file system operations. This server provides structured file management capabilities including file operations, directory management, file watching, search functionality, and archiving operations.
 
+## Table of Contents
+
+- [Features](#features)
+  - [Core File Operations](#core-file-operations)
+  - [Directory Operations](#directory-operations)
+  - [Advanced Operations](#advanced-operations)
+  - [Enterprise Features](#enterprise-features)
+- [Available Resources](#available-resources)
+- [Installation](#installation)
+- [Configuration](#configuration)
+  - [For Cursor IDE](#for-cursor-ide)
+  - [For Claude Desktop](#for-claude-desktop)
+- [Available Tools](#available-tools)
+  - [1. File Operations](#1-file-operations)
+  - [2. Directory Operations](#2-directory-operations)
+  - [3. Advanced Operations](#3-advanced-operations)
+- [Usage Examples](#usage-examples)
+  - [Basic File Operations](#basic-file-operations)
+  - [Directory Management](#directory-management)
+  - [Advanced Operations](#advanced-operations)
+- [Development](#development)
+  - [Project Structure](#project-structure)
+  - [Development Commands](#development-commands)
+  - [Testing](#testing)
+  - [Error Handling](#error-handling)
+  - [Performance Considerations](#performance-considerations)
+- [Security Considerations](#security-considerations)
+- [License](#license)
+- [Contributing](#contributing)
+- [Support](#support)
+
 ## Features
 
 ### Core File Operations
